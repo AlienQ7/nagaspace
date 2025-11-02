@@ -1,190 +1,143 @@
-// auth.js
-export async function onRequestPost({ request, env }) {
+export async function onRequestPost(context) {
+  const { request, env } = context;
   const url = new URL(request.url);
-  const path = url.pathname || "";
+  const action = url.searchParams.get("action");
   const DB = env.DB;
+  const KV = env.USERS_KV;
 
-  // Helper: hash password using SubtleCrypto
-  async function hashPassword(password) {
-    const encoder = new TextEncoder();
-    const data = encoder.encode(password);
-    const hashBuffer = await crypto.subtle.digest("SHA-256", data);
-    const hashArray = Array.from(new Uint8Array(hashBuffer));
-    return hashArray.map(b => b.toString(16).padStart(2, "0")).join("");
-  }
-
-  // Helper: generate recovery code (8 chars, alphanumeric uppercase)
-  function generateRecoveryCode(length = 8) {
-    const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
-    let out = "";
-    for (let i = 0; i < length; i++) {
-      out += chars.charAt(Math.floor(Math.random() * chars.length));
-    }
-    return out;
-  }
-
-  // Parse JSON body safely
-  let data;
   try {
-    data = await request.json();
+    const data = await request.json();
+
+    // ===== SIGNUP =====
+    if (action === "signup") {
+      const { name, email, password, phone, gender } = data;
+
+      if (!name || !email || !password) {
+        return new Response("Missing required fields", { status: 400 });
+      }
+
+      const existingUser = await DB.prepare(
+        "SELECT * FROM users WHERE email = ?"
+      )
+        .bind(email)
+        .first();
+
+      if (existingUser) {
+        return new Response(
+          JSON.stringify({ error: "Email already registered" }),
+          { status: 409 }
+        );
+      }
+
+      await DB.prepare(
+        "INSERT INTO users (name, email, password, phone, gender) VALUES (?, ?, ?, ?, ?)"
+      )
+        .bind(name, email, password, phone || "", gender || "")
+        .run();
+
+      await KV.put(`user_${email}`, JSON.stringify({ name, email }));
+
+      return new Response(JSON.stringify({ success: true }), {
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+
+    // ===== LOGIN =====
+    if (action === "login") {
+      const { email, password } = data;
+
+      const user = await DB.prepare(
+        "SELECT * FROM users WHERE email = ? AND password = ?"
+      )
+        .bind(email, password)
+        .first();
+
+      if (!user) {
+        return new Response(
+          JSON.stringify({ error: "Invalid credentials" }),
+          { status: 401 }
+        );
+      }
+
+      await KV.put(`session_${email}`, "true", { expirationTtl: 3600 });
+
+      return new Response(
+        JSON.stringify({
+          success: true,
+          name: user.name,
+          email: user.email,
+        }),
+        { headers: { "Content-Type": "application/json" } }
+      );
+    }
+
+    // ===== FORGOT PASSWORD =====
+    if (action === "forgot") {
+      const { email } = data;
+
+      const user = await DB.prepare(
+        "SELECT * FROM users WHERE email = ?"
+      )
+        .bind(email)
+        .first();
+
+      if (!user) {
+        return new Response(
+          JSON.stringify({ error: "User not found" }),
+          { status: 404 }
+        );
+      }
+
+      const recoveryCode = Math.floor(100000 + Math.random() * 900000).toString();
+
+      await DB.prepare(
+        "UPDATE users SET recovery_code = ? WHERE email = ?"
+      )
+        .bind(recoveryCode, email)
+        .run();
+
+      return new Response(
+        JSON.stringify({
+          success: true,
+          recoveryCode,
+        }),
+        { headers: { "Content-Type": "application/json" } }
+      );
+    }
+
+    // ===== RESET PASSWORD =====
+    if (action === "reset") {
+      const { email, code, newPassword } = data;
+
+      const user = await DB.prepare(
+        "SELECT * FROM users WHERE email = ? AND recovery_code = ?"
+      )
+        .bind(email, code)
+        .first();
+
+      if (!user) {
+        return new Response(
+          JSON.stringify({ error: "Invalid recovery code" }),
+          { status: 400 }
+        );
+      }
+
+      await DB.prepare(
+        "UPDATE users SET password = ?, recovery_code = NULL WHERE email = ?"
+      )
+        .bind(newPassword, email)
+        .run();
+
+      return new Response(JSON.stringify({ success: true }), {
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+
+    // ===== UNKNOWN ACTION =====
+    return new Response("Invalid action", { status: 400 });
   } catch (err) {
-    return new Response(JSON.stringify({ error: "Invalid JSON" }), {
-      status: 400,
-      headers: { "Content-Type": "application/json" },
+    return new Response(JSON.stringify({ error: err.message }), {
+      status: 500,
     });
   }
-
-  const method = request.method.toUpperCase();
-
-  // Only POST handled here (worker route mapped to /api/auth)
-  if (!path.endsWith("/signup") && !path.endsWith("/login") && !path.endsWith("/reset")) {
-    return new Response(JSON.stringify({ error: "Invalid endpoint" }), {
-      status: 404,
-      headers: { "Content-Type": "application/json" },
-    });
-  }
-
-  // ---------- SIGNUP ----------
-  if (path.endsWith("/signup")) {
-    const { name, email, password } = data || {};
-    // validations
-    if (!name || !email || !password) {
-      return new Response(JSON.stringify({ error: "Missing required fields" }), {
-        status: 400,
-        headers: { "Content-Type": "application/json" },
-      });
-    }
-    if (String(name).trim().length < 5) {
-      return new Response(JSON.stringify({ error: "Name must be at least 5 characters" }), {
-        status: 400,
-        headers: { "Content-Type": "application/json" },
-      });
-    }
-    if (String(password).length < 8) {
-      return new Response(JSON.stringify({ error: "Password must be at least 8 characters" }), {
-        status: 400,
-        headers: { "Content-Type": "application/json" },
-      });
-    }
-
-    // check existing
-    const existing = await DB.prepare("SELECT * FROM users WHERE email = ?").bind(email).first();
-    if (existing) {
-      return new Response(JSON.stringify({ error: "User already exists" }), {
-        status: 409,
-        headers: { "Content-Type": "application/json" },
-      });
-    }
-
-    const hashed = await hashPassword(password);
-    const recovery_code = generateRecoveryCode(8);
-
-    // Insert user including recovery_code
-    await DB.prepare(
-      "INSERT INTO users (name, email, password, phone, gender, recovery_code) VALUES (?, ?, ?, ?, ?, ?)"
-    )
-      .bind(name, email, hashed, null, null, recovery_code)
-      .run();
-
-    // fetch inserted user (without password)
-    const user = await DB.prepare("SELECT id, name, email, phone, gender FROM users WHERE email = ?")
-      .bind(email)
-      .first();
-
-    return new Response(
-      JSON.stringify({
-        message: "Signup successful",
-        recovery_code,
-        user,
-      }),
-      { status: 201, headers: { "Content-Type": "application/json" } }
-    );
-  }
-
-  // ---------- LOGIN ----------
-  if (path.endsWith("/login")) {
-    const { email, password } = data || {};
-    if (!email || !password) {
-      return new Response(JSON.stringify({ error: "Missing email or password" }), {
-        status: 400,
-        headers: { "Content-Type": "application/json" },
-      });
-    }
-
-    const dbUser = await DB.prepare("SELECT * FROM users WHERE email = ?").bind(email).first();
-    if (!dbUser) {
-      return new Response(JSON.stringify({ error: "User not found" }), {
-        status: 404,
-        headers: { "Content-Type": "application/json" },
-      });
-    }
-
-    const hashed = await hashPassword(password);
-    if (hashed !== dbUser.password) {
-      return new Response(JSON.stringify({ error: "Incorrect password" }), {
-        status: 401,
-        headers: { "Content-Type": "application/json" },
-      });
-    }
-
-    // return user data without password/recovery code
-    const { id, name, phone, gender } = dbUser;
-    const user = { id, name, email, phone, gender };
-
-    return new Response(JSON.stringify({ message: "Login successful", user }), {
-      status: 200,
-      headers: { "Content-Type": "application/json" },
-    });
-  }
-
-  // ---------- RESET (use recovery code) ----------
-  if (path.endsWith("/reset")) {
-    const { email, recovery_code, new_password } = data || {};
-    if (!email || !recovery_code || !new_password) {
-      return new Response(JSON.stringify({ error: "Missing email, recovery_code or new_password" }), {
-        status: 400,
-        headers: { "Content-Type": "application/json" },
-      });
-    }
-    if (String(new_password).length < 8) {
-      return new Response(JSON.stringify({ error: "New password must be at least 8 characters" }), {
-        status: 400,
-        headers: { "Content-Type": "application/json" },
-      });
-    }
-
-    const dbUser = await DB.prepare("SELECT * FROM users WHERE email = ?").bind(email).first();
-    if (!dbUser) {
-      return new Response(JSON.stringify({ error: "User not found" }), {
-        status: 404,
-        headers: { "Content-Type": "application/json" },
-      });
-    }
-
-    if (dbUser.recovery_code !== recovery_code) {
-      return new Response(JSON.stringify({ error: "Invalid recovery code" }), {
-        status: 401,
-        headers: { "Content-Type": "application/json" },
-      });
-    }
-
-    // update password (hash) and create new recovery code (expire old)
-    const hashed = await hashPassword(new_password);
-    const newRecovery = generateRecoveryCode(8);
-
-    await DB.prepare("UPDATE users SET password = ?, recovery_code = ? WHERE email = ?")
-      .bind(hashed, newRecovery, email)
-      .run();
-
-    return new Response(JSON.stringify({ message: "Password reset successful", recovery_code: newRecovery }), {
-      status: 200,
-      headers: { "Content-Type": "application/json" },
-    });
-  }
-
-  // fallback
-  return new Response(JSON.stringify({ error: "Unhandled endpoint" }), {
-    status: 404,
-    headers: { "Content-Type": "application/json" },
-  });
 }
