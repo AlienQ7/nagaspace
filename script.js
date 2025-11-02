@@ -63,9 +63,15 @@ async function loadProductDetails() {
 // ============ SIGNUP HANDLER ============
 async function handleSignup(e) {
   e.preventDefault();
-  const name = document.getElementById("signupName").value;
-  const email = document.getElementById("signupEmail").value;
+  const name = document.getElementById("signupName").value.trim();
+  const email = document.getElementById("signupEmail").value.trim();
   const password = document.getElementById("signupPassword").value;
+  const confirm = document.getElementById("confirmPassword").value;
+
+  if (password !== confirm) {
+    alert("Passwords do not match!");
+    return;
+  }
 
   const res = await fetch("/api/auth/signup", {
     method: "POST",
@@ -84,7 +90,7 @@ async function handleSignup(e) {
 // ============ LOGIN HANDLER ============
 async function handleLogin(e) {
   e.preventDefault();
-  const email = document.getElementById("loginEmail").value;
+  const email = document.getElementById("loginEmail").value.trim();
   const password = document.getElementById("loginPassword").value;
 
   const res = await fetch("/api/auth/login", {
