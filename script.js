@@ -1,20 +1,59 @@
-// ============ GLOBAL FUNCTIONS ============
-function viewAd(id) {
-  window.location.href = `productDetails.html?id=${id}`;
+// script.js -- full version
+
+// ============ UTILS ============
+function showAlert(msg) {
+  alert(msg);
 }
 
-// ============ LOAD ALL ADS ============
+// Show the one-time recovery popup (copy / save)
+function showRecoveryPopup(code, note = "Save this recovery code. You will only see it once.") {
+  const overlay = document.createElement("div");
+  overlay.id = "recovery-overlay";
+  overlay.style = `
+    position: fixed; inset: 0; display:flex; align-items:center; justify-content:center;
+    background: rgba(0,0,0,0.6); z-index: 9999;
+  `;
+  overlay.innerHTML = `
+    <div style="background:#fff; padding:22px; border-radius:10px; max-width:420px; width:90%; text-align:center;">
+      <h2 style="margin:0 0 8px;color:var(--color-accent)">Important — Recovery Code</h2>
+      <p style="margin:0 0 12px;">${note}</p>
+      <div style="font-size:20px; font-weight:700; letter-spacing:2px; margin:6px 0; color:#111;">${code}</div>
+      <div style="margin-top:14px;">
+        <button id="copyRecoveryBtn">Copy</button>
+        <button id="okRecoveryBtn" style="margin-left:10px;">I saved it</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+
+  document.getElementById("copyRecoveryBtn").onclick = async () => {
+    try {
+      await navigator.clipboard.writeText(code);
+      alert("Copied to clipboard");
+    } catch (e) {
+      alert("Copy failed — manually copy it.");
+    }
+  };
+  document.getElementById("okRecoveryBtn").onclick = () => {
+    overlay.remove();
+  };
+}
+
+// ============ ADS / PRODUCTS ============
+
 async function loadAds(containerId = "adsList", userId = null) {
   try {
     const res = await fetch("/api/ads");
+    if (!res.ok) throw new Error("Failed to fetch ads");
     const ads = await res.json();
+
     const container = document.getElementById(containerId);
     if (!container) return;
 
     container.innerHTML = "";
-    const filtered = userId ? ads.filter(ad => ad.user_id == userId) : ads;
+    const filtered = userId ? ads.filter(ad => String(ad.user_id) === String(userId)) : ads;
 
-    if (filtered.length === 0) {
+    if (!filtered || filtered.length === 0) {
       container.innerHTML = "<p>No ads found.</p>";
       return;
     }
@@ -24,10 +63,10 @@ async function loadAds(containerId = "adsList", userId = null) {
       div.className = "ad-card";
       div.innerHTML = `
         <div class="ad-inner" onclick="viewAd(${ad.id})">
-          <h3>${ad.title}</h3>
-          <p>${ad.description ? ad.description.substring(0, 80) + "..." : "No description"}</p>
-          <p><strong>Location:</strong> ${ad.location || "Unknown"}</p>
-          <p><strong>Contact:</strong> ${ad.contact || "N/A"}</p>
+          <h3>${escapeHtml(ad.title)}</h3>
+          <p>${escapeHtml(ad.description ? ad.description.substring(0, 120) + "..." : "No description")}</p>
+          <p><strong>Location:</strong> ${escapeHtml(ad.location || "Unknown")}</p>
+          <p><strong>Contact:</strong> ${escapeHtml(ad.contact || "N/A")}</p>
         </div>
       `;
       container.appendChild(div);
@@ -37,119 +76,172 @@ async function loadAds(containerId = "adsList", userId = null) {
   }
 }
 
-// ============ PRODUCT DETAILS ============
-async function loadProductDetails() {
-  const params = new URLSearchParams(window.location.search);
-  const id = params.get("id");
-  if (!id) return;
+function viewAd(id) {
+  window.location.href = `productDetails.html?id=${id}`;
+}
+
+async function deleteAd(id) {
+  if (!confirm("Are you sure you want to delete this ad?")) return;
+  try {
+    const res = await fetch("/api/ads", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id }),
+    });
+    const data = await res.json();
+    alert(data.message || "Deleted");
+    location.reload();
+  } catch (err) {
+    console.error("Error deleting ad:", err);
+  }
+}
+
+// ============ AUTH HANDLERS ============
+
+async function handleSignup(e) {
+  e && e.preventDefault();
+  const name = (document.getElementById("signupName") || {}).value || (document.getElementById("username") || {}).value;
+  const email = (document.getElementById("signupEmail") || {}).value || (document.getElementById("email") || {}).value;
+  const password = (document.getElementById("signupPassword") || {}).value || (document.getElementById("password") || {}).value;
+  const confirm = (document.getElementById("signupConfirmPassword") || {}).value || (document.getElementById("confirmPassword") || {}).value;
+
+  if (!name || !email || !password) {
+    return showAlert("Please fill name, email and password.");
+  }
+  if (String(name).trim().length < 5) return showAlert("Name must be at least 5 characters.");
+  if (password.length < 8) return showAlert("Password must be at least 8 characters.");
+  if (password !== confirm) return showAlert("Passwords do not match.");
 
   try {
-    const res = await fetch(`/api/ads?id=${id}`);
-    if (!res.ok) throw new Error("Ad not found");
-    const ad = await res.json();
+    const res = await fetch("/api/auth/signup", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name, email, password }),
+    });
 
-    document.getElementById("productName").innerText = ad.title;
-    document.getElementById("description").innerText = ad.description;
-    document.getElementById("description2").innerText = ad.description;
-    document.getElementById("price").innerText = ad.category || "Uncategorized";
-    document.getElementById("location").innerHTML = `<i class="fa-solid fa-location-dot"></i> ${ad.location || "Unknown"}`;
-    document.getElementById("phoneL").innerText = ad.contact || "N/A";
-    document.getElementById("nameL").innerText = ad.user_id ? "User #" + ad.user_id : "Unknown";
+    const json = await res.json();
+    if (!res.ok) {
+      return showAlert(json.error || "Signup failed");
+    }
+
+    // Show recovery code (only once)
+    if (json.recovery_code) {
+      showRecoveryPopup(json.recovery_code, "This recovery code is shown only once. Save it somewhere safe.");
+    }
+
+    showAlert("Account created successfully. You can now log in.");
+    window.location.href = "index.html";
   } catch (err) {
-    console.error("Error loading product details:", err);
+    console.error("Signup error:", err);
+    showAlert("Network error during signup.");
   }
 }
 
-// ============ SIGNUP HANDLER ============
-async function handleSignup(e) {
-  e.preventDefault();
-  const name = document.getElementById("signupName").value.trim();
-  const email = document.getElementById("signupEmail").value.trim();
-  const password = document.getElementById("signupPassword").value;
-  const confirm = document.getElementById("confirmPassword").value;
-
-  if (password !== confirm) {
-    alert("Passwords do not match!");
-    return;
-  }
-
-  const res = await fetch("/api/auth/signup", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ name, email, password }),
-  });
-
-  const data = await res.json();
-  if (res.ok && data.recovery_code) {
-    showRecoveryPopup(data.recovery_code);
-  } else {
-    alert(data.error || "Signup failed");
-  }
-}
-
-// ============ LOGIN HANDLER ============
 async function handleLogin(e) {
-  e.preventDefault();
-  const email = document.getElementById("loginEmail").value.trim();
-  const password = document.getElementById("loginPassword").value;
+  e && e.preventDefault();
+  const email = (document.getElementById("loginEmail") || {}).value || (document.getElementById("emailLogin") || {}).value;
+  const password = (document.getElementById("loginPassword") || {}).value || (document.getElementById("emailPassword") || {}).value;
 
-  const res = await fetch("/api/auth/login", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email, password }),
-  });
+  if (!email || !password) return showAlert("Please provide email and password");
 
-  const data = await res.json();
-  if (res.ok && data.user) {
-    localStorage.setItem("user", JSON.stringify(data.user));
+  try {
+    const res = await fetch("/api/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, password }),
+    });
+    const json = await res.json();
+    if (!res.ok) return showAlert(json.error || "Login failed");
+
+    // Save user and redirect
+    localStorage.setItem("user", JSON.stringify(json.user));
     window.location.href = "dashboard.html";
-  } else {
-    alert(data.error || "Login failed");
+  } catch (err) {
+    console.error("Login error:", err);
+    showAlert("Network error during login.");
   }
 }
 
-// ============ RECOVERY POPUP ============
-function showRecoveryPopup(code) {
-  const overlay = document.createElement("div");
-  overlay.style = `
-    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-    background: rgba(0,0,0,0.7); display: flex;
-    align-items: center; justify-content: center; z-index: 1000;
-  `;
-  overlay.innerHTML = `
-    <div style="background:#fff; padding:20px; border-radius:10px; text-align:center; max-width:350px;">
-      <h2 style="color:#ff9800;">⚠️ Important!</h2>
-      <p style="margin:10px 0;">Your recovery code (save it safely):</p>
-      <div style="font-weight:bold; font-size:18px; margin:10px 0; color:#333;">${code}</div>
-      <p style="color:red; font-size:14px;">You will not see this code again.</p>
-      <button id="copyBtn">Copy Code</button>
-      <button id="okBtn" style="margin-left:10px;">I Saved It</button>
-    </div>
-  `;
-  document.body.appendChild(overlay);
+async function handleReset(e) {
+  e && e.preventDefault();
+  const email = (document.getElementById("resetEmail") || {}).value;
+  const recovery_code = (document.getElementById("resetCode") || {}).value;
+  const new_password = (document.getElementById("resetNewPassword") || {}).value;
+  const confirm = (document.getElementById("resetConfirmPassword") || {}).value;
 
-  document.getElementById("copyBtn").onclick = () => {
-    navigator.clipboard.writeText(code);
-    alert("Recovery code copied!");
-  };
-  document.getElementById("okBtn").onclick = () => overlay.remove();
+  if (!email || !recovery_code || !new_password) return showAlert("Please provide email, recovery code and new password.");
+  if (new_password.length < 8) return showAlert("New password must be at least 8 characters.");
+  if (new_password !== confirm) return showAlert("Passwords do not match.");
+
+  try {
+    const res = await fetch("/api/auth/reset", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, recovery_code, new_password }),
+    });
+    const json = await res.json();
+    if (!res.ok) return showAlert(json.error || "Reset failed");
+
+    if (json.recovery_code) {
+      showRecoveryPopup(json.recovery_code, "Your password was reset successfully. This is your NEW recovery code (save it).");
+    }
+
+    showAlert("Password reset successful. Please login with your new password.");
+    window.location.href = "index.html";
+  } catch (err) {
+    console.error("Reset error:", err);
+    showAlert("Network error during reset.");
+  }
 }
 
-// ============ INIT ============
-document.addEventListener("DOMContentLoaded", () => {
-  const path = window.location.pathname;
+// Basic HTML escape
+function escapeHtml(s) {
+  if (!s) return "";
+  return String(s).replace(/[&<>"']/g, (m) => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[m]));
+}
 
+// ============ PAGE INIT ============
+document.addEventListener("DOMContentLoaded", () => {
+  // Wire up signup form(s)
+  const signupForm = document.getElementById("signupForm");
+  if (signupForm) signupForm.addEventListener("submit", handleSignup);
+
+  // Wire up login form(s)
+  const loginForm = document.getElementById("loginForm");
+  if (loginForm) loginForm.addEventListener("submit", handleLogin);
+
+  // Wire up reset form
+  const resetForm = document.getElementById("resetForm");
+  if (resetForm) resetForm.addEventListener("submit", handleReset);
+
+  // Auto-run ads/product loading depending on page
+  const path = window.location.pathname;
   if (path.endsWith("profile.html")) {
     const user = JSON.parse(localStorage.getItem("user"));
     if (user && user.id) loadAds("myAds", user.id);
   } else if (path.endsWith("productDetails.html")) {
-    loadProductDetails();
-  } else if (document.getElementById("adsList")) {
-    loadAds("adsList");
+    const params = new URLSearchParams(window.location.search);
+    const id = params.get("id");
+    if (id) {
+      // small inline fetch for a single ad (if productDetails page expects it)
+      fetch(`/api/ads?id=${encodeURIComponent(id)}`)
+        .then(r => r.json())
+        .then(ad => {
+          if (ad && document.getElementById("productName")) {
+            document.getElementById("productName").innerText = ad.title || "";
+            const desc = ad.description || "";
+            if (document.getElementById("description")) document.getElementById("description").innerText = desc;
+            if (document.getElementById("description2")) document.getElementById("description2").innerText = desc;
+            if (document.getElementById("price")) document.getElementById("price").innerText = ad.category || "";
+            if (document.getElementById("location")) document.getElementById("location").innerHTML = `<i class="fa-solid fa-location-dot"></i> ${ad.location || ""}`;
+            if (document.getElementById("phoneL")) document.getElementById("phoneL").innerText = ad.contact || "";
+            if (document.getElementById("nameL")) document.getElementById("nameL").innerText = ad.user_id ? "User #" + ad.user_id : "Unknown";
+          }
+        })
+        .catch(err => console.error(err));
+    }
+  } else {
+    // try to load main ads on homepage if there's an element with id adsList
+    if (document.getElementById("adsList")) loadAds("adsList");
   }
-
-  const signupForm = document.getElementById("signupForm");
-  const loginForm = document.getElementById("loginForm");
-  if (signupForm) signupForm.addEventListener("submit", handleSignup);
-  if (loginForm) loginForm.addEventListener("submit", handleLogin);
 });
