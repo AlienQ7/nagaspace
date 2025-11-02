@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sign Up | Alien Marketplace</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="signUp">
+    <div class="signUp_account">
+      <span class="close__btn" onclick="window.location.href='index.html'">&times;</span>
+      <h1>Create Account</h1>
+      <p>Join our community and start exploring today.</p>
+
+      <form id="signupForm" onsubmit="return handleSignup(event)">
+        <input type="text" id="username" placeholder="Username" required />
+        <input type="email" id="email" placeholder="Email" required />
+        <input type="password" id="password" placeholder="Password" required />
+        <input type="password" id="confirmPassword" placeholder="Confirm Password" required />
+        <button type="submit">Sign Up</button>
+      </form>
+
+      <p>Already have an account? <a href="index.html"><b>Login here</b></a></p>
+    </div>
+  </div>
+
+  <script>
+    async function handleSignup(e) {
+      e.preventDefault();
+
+      const username = document.getElementById("username").value.trim();
+      const email = document.getElementById("email").value.trim();
+      const password = document.getElementById("password").value;
+      const confirmPassword = document.getElementById("confirmPassword").value;
+
+      if (password !== confirmPassword) {
+        alert("Passwords do not match!");
+        return;
+      }
+
+      const res = await fetch("/api/signup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username, email, password }),
+      });
+
+      if (res.ok) {
+        alert("Account created successfully! Please log in.");
+        window.location.href = "index.html";
+      } else {
+        const { error } = await res.json();
+        alert(error || "Something went wrong!");
+      }
+    }
+  </script>
+</body>
+</html>
