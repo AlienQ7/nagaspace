@@ -1,153 +1,96 @@
-var phone = localStorage.getItem("phoneShow").toLowerCase();
-if (phone === "no") {
-  document.getElementById("phoneL").innerHTML = "Cann't Show Phone";
-} else {
-  document.getElementById("phoneL").innerHTML = localStorage.getItem("phone");
-}
-document.getElementById("nameL").innerHTML = localStorage.getItem("name");
-document.getElementById("description").innerHTML =
-  localStorage.getItem("description");
-document.getElementById("description2").innerHTML =
-  localStorage.getItem("description");
-document.getElementById("main").src = localStorage.getItem("image");
-document.getElementById("price").innerHTML = localStorage.getItem("price");
-document.getElementById("location").innerHTML =
-  localStorage.getItem("location");
-document.getElementById("productName").innerHTML =
-  localStorage.getItem("productName");
+// ============ GLOBAL FUNCTIONS ============
 
-function showData() {
-  var data = JSON.parse(localStorage.getItem("users"));
-  var email = localStorage.getItem("email");
-  var isAuthenticated = localStorage.getItem("isAuthenticated");
-  for (let i = 0; i < data.length; i++) {
-    if (email == data[i].email && isAuthenticated === "true") {
-      document.getElementById("login__sell").innerHTML = `
-       <img class="avatar" onclick="profilePage()" width="60px"src="./images/avatar.png" />
-                 <button onclick="sell()" class="sell__btn">+ Sell</button>
-                `;
+// View ad details
+function viewAd(id) {
+  window.location.href = `productDetails.html?id=${id}`;
+}
+
+// ============ LOAD ALL ADS (Homepage) ============
+async function loadAds(containerId = "adsList", userId = null) {
+  try {
+    const res = await fetch("/api/ads");
+    const ads = await res.json();
+
+    const container = document.getElementById(containerId);
+    if (!container) return;
+
+    container.innerHTML = "";
+
+    const filtered = userId ? ads.filter(ad => ad.user_id == userId) : ads;
+
+    if (filtered.length === 0) {
+      container.innerHTML = "<p>No ads found.</p>";
+      return;
     }
+
+    filtered.forEach(ad => {
+      const div = document.createElement("div");
+      div.className = "ad-card";
+      div.innerHTML = `
+        <div class="ad-inner" onclick="viewAd(${ad.id})">
+          <h3>${ad.title}</h3>
+          <p>${ad.description ? ad.description.substring(0, 80) + "..." : "No description"}</p>
+          <p><strong>Location:</strong> ${ad.location || "Unknown"}</p>
+          <p><strong>Contact:</strong> ${ad.contact || "N/A"}</p>
+        </div>
+      `;
+      container.appendChild(div);
+    });
+  } catch (err) {
+    console.error("Error loading ads:", err);
   }
 }
 
-function sell() {
-  var data = JSON.parse(localStorage.getItem("users"));
-  var email = localStorage.getItem("email");
-  var isAuthenticated = localStorage.getItem("isAuthenticated");
-  var flage = true;
-  for (let i = 0; i < data.length; i++) {
-    if (email == data[i].email && isAuthenticated === "true") {
-      flage = false;
-      window.location.href = "./sell.html";
-    }
-  }
-  if (flage === true) {
-    document.getElementById("login").classList.remove("hidden");
-  }
-}
+// ============ LOAD SINGLE PRODUCT DETAILS ============
+async function loadProductDetails() {
+  const params = new URLSearchParams(window.location.search);
+  const id = params.get("id");
+  if (!id) return;
 
-function profilePage() {
-  window.location.href = "./profile.html";
-}
-showData();
+  try {
+    const res = await fetch(`/api/ads?id=${id}`);
+    if (!res.ok) throw new Error("Ad not found");
+    const ad = await res.json();
 
-function openLogin() {
-  document.getElementById("login").classList.remove("hidden");
-}
-
-function closeLogin() {
-  document.getElementById("login").classList.add("hidden");
-}
-
-function emailLogin() {
-  document.getElementById("email").classList.remove("hidden");
-  document.getElementById("login").classList.add("hidden");
-}
-
-function closeEmail() {
-  document.getElementById("email").classList.add("hidden");
-}
-
-function backEmail() {
-  document.getElementById("email").classList.add("hidden");
-  document.getElementById("login").classList.remove("hidden");
-}
-
-function phoneLogin() {
-  document.getElementById("phone").classList.remove("hidden");
-  document.getElementById("login").classList.add("hidden");
-}
-
-function closePhone() {
-  document.getElementById("phone").classList.add("hidden");
-}
-
-function backPhone() {
-  document.getElementById("phone").classList.add("hidden");
-  document.getElementById("login").classList.remove("hidden");
-}
-
-function createAccountPage() {
-  document.getElementById("signUp").classList.remove("hidden");
-  document.getElementById("login").classList.add("hidden");
-}
-
-function closeSignUp() {
-  document.getElementById("signUp").classList.add("hidden");
-}
-
-function backSignUp() {
-  document.getElementById("signUp").classList.add("hidden");
-  document.getElementById("login").classList.remove("hidden");
-}
-
-function signUp() {
-  let data = JSON.parse(localStorage.getItem("users"))
-    ? JSON.parse(localStorage.getItem("users"))
-    : [];
-  let flage = false;
-  for (let i = 0; i < data.length; i++) {
-    if (data[i].email === document.getElementById("signEmail").value) {
-      flage = true;
-      alert("You have entered a duplicate email address");
-    }
-  }
-  if (flage === false) {
-    let users = [];
-    let obj = {
-      name: document.getElementById("name").value,
-      email: document.getElementById("signEmail").value,
-      gender: document.getElementById("gender").value,
-      phone: document.getElementById("signphone").value,
-      isAuthenticated: true,
-    };
-    users = JSON.parse(localStorage.getItem("users"))
-      ? JSON.parse(localStorage.getItem("users"))
-      : [];
-
-    users.push(obj);
-    localStorage.setItem("users", JSON.stringify(users));
-    document.getElementById("signUp").classList.add("hidden");
-    document.getElementById("email").classList.remove("hidden");
+    document.getElementById("productName").innerText = ad.title;
+    document.getElementById("description").innerText = ad.description;
+    document.getElementById("description2").innerText = ad.description;
+    document.getElementById("price").innerText = ad.category || "Uncategorized";
+    document.getElementById("location").innerHTML = `<i class="fa-solid fa-location-dot"></i> ${ad.location || "Unknown"}`;
+    document.getElementById("phoneL").innerText = ad.contact || "N/A";
+    document.getElementById("nameL").innerText = ad.user_id ? "User #" + ad.user_id : "Unknown";
+  } catch (err) {
+    console.error("Error loading product details:", err);
   }
 }
 
-function login() {
-  let email = document.getElementById("emailLogin").value;
-  let users = JSON.parse(localStorage.getItem("users"));
-  var flage = false;
-  for (let i = 0; i < users.length; i++) {
-    if (users[i].email === email) {
-      flage = true;
-      alert("You have successfully Login");
-      localStorage.setItem("name", users[i].name);
-      localStorage.setItem("email", email);
-      localStorage.setItem("phone", users[i].phone);
-      localStorage.setItem("isAuthenticated", users[i].isAuthenticated);
-      window.location.reload();
-    }
-  }
-  if (flage == false) {
-    alert("Please enter a valid email and password");
+// ============ DELETE AD ============
+async function deleteAd(id) {
+  if (!confirm("Are you sure you want to delete this ad?")) return;
+  try {
+    const res = await fetch("/api/ads", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id })
+    });
+    const data = await res.json();
+    alert(data.message || "Deleted");
+    location.reload();
+  } catch (err) {
+    console.error("Error deleting ad:", err);
   }
 }
+
+// ============ INIT PAGE LOADING ============
+document.addEventListener("DOMContentLoaded", () => {
+  const path = window.location.pathname;
+
+  if (path.endsWith("profile.html")) {
+    const user = JSON.parse(localStorage.getItem("user"));
+    if (user && user.id) loadAds("myAds", user.id);
+  } else if (path.endsWith("productDetails.html")) {
+    loadProductDetails();
+  } else if (document.getElementById("adsList")) {
+    loadAds("adsList");
+  }
+});
