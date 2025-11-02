@@ -1,13 +1,12 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Dashboard | NagaDataLink</title>
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <!-- HEADER -->
   <header class="header-bar">
     <div class="rank-display">
       <span class="rank-label">Naga</span>
@@ -19,16 +18,13 @@
     </div>
   </header>
 
-  <!-- DASHBOARD CONTENT -->
   <main class="container">
-    <!-- Welcome Section -->
     <section class="profile-container">
       <h2>Welcome, <span id="userName">Guest</span></h2>
       <p>Email: <span id="userEmail">-</span></p>
       <a id="profileLink" href="profile.html" class="menu-shop-link" style="display:none;">View / Edit Profile</a>
     </section>
 
-    <!-- My Ads Section -->
     <section class="task-manager">
       <h2>My Ads</h2>
       <div id="myAds" class="ads-container">
@@ -36,7 +32,6 @@
       </div>
     </section>
 
-    <!-- Add New Ad Section -->
     <section class="auth-container">
       <h2>Post a New Ad</h2>
       <form id="addAdForm">
@@ -50,15 +45,14 @@
     </section>
   </main>
 
-  <!-- FOOTER -->
   <footer class="footer">
     <p>&copy; 2025 NagaDataLink</p>
   </footer>
 
+  <script src="script.js"></script>
   <script>
-    document.addEventListener("DOMContentLoaded", async () => {
+    document.addEventListener("DOMContentLoaded", () => {
       const user = JSON.parse(localStorage.getItem("user"));
-
       const userNameEl = document.getElementById("userName");
       const userEmailEl = document.getElementById("userEmail");
       const loginBtn = document.getElementById("loginBtn");
@@ -66,89 +60,58 @@
       const profileLink = document.getElementById("profileLink");
 
       if (user) {
-        // Show user data
         userNameEl.textContent = user.name || "User";
         userEmailEl.textContent = user.email || "-";
         loginBtn.style.display = "none";
         logoutBtn.style.display = "inline-block";
         profileLink.style.display = "inline-block";
-        loadUserAds(user.email);
+        // load user ads (script.js has loadAds)
+        if (user.id) loadAds("myAds", user.id);
       } else {
-        // Guest view
         document.getElementById("myAds").innerHTML =
-          '<p class="stats-line">Please <a href="index.html" style="color: var(--acc);">login</a> to view your ads.</p>';
+          '<p class="stats-line">Please <a href="index.html" style="color: var(--color-accent);">login</a> to view your ads.</p>';
         document.getElementById("addAdForm").style.display = "none";
       }
+
+      // Add ad submit handler
+      document.getElementById("addAdForm").addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const user = JSON.parse(localStorage.getItem("user"));
+        if (!user) return alert("Please login first.");
+
+        const data = {
+          title: document.getElementById("adTitle").value,
+          category: document.getElementById("adCategory").value,
+          location: document.getElementById("adLocation").value,
+          description: document.getElementById("adDescription").value,
+          contact: document.getElementById("adContact").value,
+          email: user.email,
+          user_id: user.id
+        };
+
+        try {
+          const res = await fetch("/api/ads", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(data)
+          });
+          if (res.ok) {
+            alert("Ad posted successfully!");
+            e.target.reset();
+            loadAds("myAds", user.id);
+          } else {
+            alert("Failed to post ad.");
+          }
+        } catch {
+          alert("Network error, please try again later.");
+        }
+      });
     });
 
-    async function loadUserAds(email) {
-      try {
-        const res = await fetch(`/api/ads?email=${encodeURIComponent(email)}`);
-        if (!res.ok) throw new Error("Failed to fetch ads");
-        const ads = await res.json();
-
-        const adsContainer = document.getElementById("myAds");
-        adsContainer.innerHTML = "";
-
-        if (ads.length === 0) {
-          adsContainer.innerHTML = "<p>No ads found.</p>";
-          return;
-        }
-
-        ads.forEach(ad => {
-          const adBox = document.createElement("div");
-          adBox.className = "profile-container";
-          adBox.innerHTML = `
-            <h3 style="color:var(--acc);">${ad.title}</h3>
-            <p>${ad.description}</p>
-            <p><b>Category:</b> ${ad.category} | <b>Location:</b> ${ad.location}</p>
-            <p><b>Contact:</b> ${ad.contact}</p>
-          `;
-          adsContainer.appendChild(adBox);
-        });
-      } catch (err) {
-        document.getElementById("myAds").innerHTML =
-          "<p>Failed to load ads. Try again later.</p>";
-      }
-    }
-
-    async function logout() {
+    function logout() {
       localStorage.removeItem("user");
       window.location.href = "index.html";
     }
-
-    document.getElementById("addAdForm").addEventListener("submit", async (e) => {
-      e.preventDefault();
-      const user = JSON.parse(localStorage.getItem("user"));
-      if (!user) return alert("Please login first.");
-
-      const data = {
-        title: document.getElementById("adTitle").value,
-        category: document.getElementById("adCategory").value,
-        location: document.getElementById("adLocation").value,
-        description: document.getElementById("adDescription").value,
-        contact: document.getElementById("adContact").value,
-        email: user.email
-      };
-
-      try {
-        const res = await fetch("/api/ads", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(data)
-        });
-
-        if (res.ok) {
-          alert("Ad posted successfully!");
-          e.target.reset();
-          loadUserAds(user.email);
-        } else {
-          alert("Failed to post ad.");
-        }
-      } catch {
-        alert("Network error, please try again later.");
-      }
-    });
   </script>
 </body>
 </html>
