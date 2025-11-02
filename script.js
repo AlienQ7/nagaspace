@@ -207,6 +207,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const loginForm = document.getElementById("loginForm");
   if (loginForm) loginForm.addEventListener("submit", handleLogin);
 
-  const resetForm = document.getElementById("resetForm");
-  if (resetForm) resetForm.addEventListener("submit", handlePasswordReset);
+  // 👇 Corrected this: use forgot-password.html form
+  const forgotForm = document.getElementById("forgotPasswordForm");
+  if (forgotForm) forgotForm.addEventListener("submit", handlePasswordReset);
 });
