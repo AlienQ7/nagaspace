@@ -1,5 +1,5 @@
 name = "nagadatalink"
-pages_build_output_dir = "public"
+pages_build_output_dir = "." #"public"
 compatibility_date = "2025-11-02"
 
 # --- D1 Database Binding (for storing ads) ---
