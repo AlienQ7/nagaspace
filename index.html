@@ -6,7 +6,7 @@
   <title>NagaSpace</title>
   <link rel="stylesheet" href="style.css" />
   <style>
-    /* --- Header --- */
+    /* --- Header --- 
     .header-bar {
       display: flex;
       justify-content: space-between;
@@ -16,7 +16,24 @@
       color: #fff;
       position: relative;
       z-index: 1000;
-    }
+    } */
+.header-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 20px;
+  background: #111;
+  color: #fff;
+  position: relative;
+  z-index: 1000;
+}
+
+.menu-wrapper {
+  position: absolute;
+  right: 15px;
+  top: 50%;
+  transform: translateY(-50%);
+}
     .rank-display { font-size: 1.3em; font-weight: bold; }
     .rank-label { color: #fbbf24; }
     .rank-title { color: #fff; }
@@ -200,6 +217,21 @@
 </head>
 <body>
   <!-- HEADER -->
+<header class="header-bar">
+  <div class="rank-display">
+    <span class="rank-label">Naga</span><span class="rank-title">Space</span>
+  </div>
+
+  <div class="menu-wrapper">
+    <button id="hamburger" class="hamburger-icon">&#9776;</button>
+    <div id="dropdownMenu" class="dropdown-menu">
+      <button id="menuLogin">Login</button>
+      <a id="menuProfile" href="profile.html" style="display:none;">Profile</a>
+      <button id="menuLogout" style="display:none;">Logout</button>
+    </div>
+  </div>
+</header>
+  <!-- HEADER 
   <header class="header-bar">
     <div class="rank-display"><span class="rank-label">Naga</span><span class="rank-title">Space</span></div>
     <!--<div class="menu-wrapper">
@@ -208,17 +240,9 @@
         <button id="menuLogin">Login</button>
         <a id="menuProfile" href="profile.html" style="display:none;">Profile</a>
         <button id="menuLogout" style="display:none;">Logout</button>
-      </div> -->
-    </div>
-  </header>
-    <div class="menu-wrapper">
-      <button id="hamburger" class="hamburger-icon">&#9776;</button>
-      <div id="dropdownMenu" class="dropdown-menu">
-        <button id="menuLogin">Login</button>
-        <a id="menuProfile" href="profile.html" style="display:none;">Profile</a>
-        <button id="menuLogout" style="display:none;">Logout</button>
       </div>
-
+    </div>
+  </header> -->
   <!-- CATEGORY DRAWER -->
   <div id="categoryDrawer" class="category-drawer">
     <button class="category-close" id="closeCategory">&times;</button>
