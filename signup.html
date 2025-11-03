@@ -21,14 +21,31 @@
       box-shadow: 0 0 20px #333;
       width: 300px;
     }
-    input, button {
+    input {
       width: 100%;
       padding: 0.6rem;
       margin: 0.4rem 0;
       border-radius: 6px;
       border: none;
     }
+    .password-container {
+      position: relative;
+    }
+    .toggle-password {
+      position: absolute;
+      right: 10px;
+      top: 50%;
+      transform: translateY(-50%);
+      cursor: pointer;
+      color: #aaa;
+      font-size: 0.9rem;
+    }
     button {
+      width: 100%;
+      padding: 0.6rem;
+      margin: 0.4rem 0;
+      border-radius: 6px;
+      border: none;
       background: #28a745;
       color: white;
       font-weight: bold;
@@ -44,14 +61,34 @@
       <input type="text" id="name" placeholder="Full Name" required />
       <input type="email" id="email" placeholder="Email" required />
       <input type="tel" id="phone" placeholder="Phone (optional)" />
-      <input type="password" id="password" placeholder="Password" required />
-      <input type="password" id="confirmPassword" placeholder="Confirm Password" required />
+
+      <div class="password-container">
+        <input type="password" id="password" placeholder="Password" required />
+        <span class="toggle-password" onclick="togglePassword('password', this)">👁️</span>
+      </div>
+
+      <div class="password-container">
+        <input type="password" id="confirmPassword" placeholder="Confirm Password" required />
+        <span class="toggle-password" onclick="togglePassword('confirmPassword', this)">👁️</span>
+      </div>
+
       <button type="submit">Sign Up</button>
     </form>
     <p>Already have an account? <a href="index.html" style="color:#4af;">Login</a></p>
   </div>
 
   <script>
+    function togglePassword(id, el) {
+      const field = document.getElementById(id);
+      if (field.type === "password") {
+        field.type = "text";
+        el.textContent = "🙈";
+      } else {
+        field.type = "password";
+        el.textContent = "👁️";
+      }
+    }
+
     document.getElementById("signupForm").addEventListener("submit", async (e) => {
       e.preventDefault();
 
