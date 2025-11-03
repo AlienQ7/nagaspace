@@ -21,7 +21,7 @@
       box-shadow: 0 0 20px #333;
       width: 300px;
     }
-    input, select, button {
+    input, button {
       width: 100%;
       padding: 0.6rem;
       margin: 0.4rem 0;
@@ -43,8 +43,9 @@
     <form id="signupForm">
       <input type="text" id="name" placeholder="Full Name" required />
       <input type="email" id="email" placeholder="Email" required />
-      <input type="password" id="password" placeholder="Password" required />
       <input type="tel" id="phone" placeholder="Phone (optional)" />
+      <input type="password" id="password" placeholder="Password" required />
+      <input type="password" id="confirmPassword" placeholder="Confirm Password" required />
       <button type="submit">Sign Up</button>
     </form>
     <p>Already have an account? <a href="index.html" style="color:#4af;">Login</a></p>
@@ -57,8 +58,13 @@
       const name = document.getElementById("name").value.trim();
       const email = document.getElementById("email").value.trim();
       const password = document.getElementById("password").value.trim();
+      const confirmPassword = document.getElementById("confirmPassword").value.trim();
       const phone = document.getElementById("phone").value.trim();
-      const gender = document.getElementById("gender").value;
+
+      if (password !== confirmPassword) {
+        alert("❌ Passwords do not match!");
+        return;
+      }
 
       const res = await fetch("/api/auth", {
         method: "POST",
@@ -68,8 +74,7 @@
           name,
           email,
           password,
-          phone,
-          gender
+          phone
         }),
       });
 
@@ -78,7 +83,7 @@
 
       if (res.ok) {
         alert("✅ Signup successful! Your recovery code: " + data.recovery_code);
-        window.location.href = "index.html";
+        window.location.href = "profile.html";
       } else {
         alert("❌ " + (data.error || "Signup failed"));
       }
