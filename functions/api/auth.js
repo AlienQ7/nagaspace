@@ -1,3 +1,4 @@
+console.log("Signup request received:", body);
 // functions/api/auth.js
 export async function onRequestPost(context) {
   const { request, env } = context;
