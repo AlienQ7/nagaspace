@@ -1,10 +1,10 @@
-console.log("Signup request received:", body);
 // functions/api/auth.js
+
 export async function onRequestPost(context) {
   const { request, env } = context;
-  const DB = env.DB; // D1 binding in wrangler.toml
+  const DB = env.DB; // D1 binding
 
-  // Helper: SHA-256 hex hash (worker/subtle)
+  // --- Helper: SHA-256 password hash ---
   async function hashPassword(password) {
     const enc = new TextEncoder();
     const data = enc.encode(password);
@@ -13,13 +13,12 @@ export async function onRequestPost(context) {
     return bytes.map(b => b.toString(16).padStart(2, "0")).join("");
   }
 
-  // Helper: strong recovery code (12 chars alnum)
+  // --- Helper: Recovery Code Generator ---
   function makeRecoveryCode(len = 12) {
     const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
     let out = "";
     const rand = crypto.getRandomValues;
     while (out.length < len) {
-      // generate a random 32-bit value, extract bytes
       const r = new Uint32Array(1);
       rand(r);
       let v = r[0];
@@ -31,36 +30,37 @@ export async function onRequestPost(context) {
     return out;
   }
 
-  // Parse JSON safely
+  // --- Parse JSON safely ---
   let body = {};
   try {
     body = await request.json();
   } catch (e) {
-    // no JSON body
     return new Response(JSON.stringify({ error: "Invalid or missing JSON body" }), {
       status: 400,
       headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
     });
   }
 
-  // Determine action: prefer explicit body.action, fallback to URL path
+  // --- Detect action (signup / login / forgot) ---
   const url = new URL(request.url);
   const pathname = url.pathname || "";
   let action = (body.action || "").toString().toLowerCase();
   if (!action) {
     if (pathname.endsWith("/signup")) action = "signup";
     else if (pathname.endsWith("/login")) action = "login";
-    else if (pathname.endsWith("/forgot") || pathname.endsWith("/reset")) action = "forgot";
+    else if (pathname.endsWith("/forgot")) action = "forgot";
   }
 
   if (!action) {
-    return new Response(JSON.stringify({ error: "Missing action. Use { action: 'signup' } or { action: 'login' } in request body." }), {
+    return new Response(JSON.stringify({ error: "Missing action" }), {
       status: 400,
       headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
     });
   }
 
-  // -------- SIGNUP --------
+  // =========================================================
+  // SIGNUP
+  // =========================================================
   if (action === "signup") {
     const name = (body.name || "").trim();
     const email = (body.email || "").trim().toLowerCase();
@@ -76,7 +76,6 @@ export async function onRequestPost(context) {
     }
 
     try {
-      // check existing
       const existing = await DB.prepare("SELECT id FROM users WHERE email = ?").bind(email).first();
       if (existing) {
         return new Response(JSON.stringify({ error: "User already exists" }), {
@@ -92,16 +91,15 @@ export async function onRequestPost(context) {
         "INSERT INTO users (name, email, password, phone, gender, recovery_code) VALUES (?, ?, ?, ?, ?, ?)"
       ).bind(name, email, hashed, phone, gender, recovery_code).run();
 
-      // return recovery code once (client must show/save it)
       return new Response(JSON.stringify({
         message: "Signup successful",
-        recovery_code // show once — will be stored server-side
+        recovery_code
       }), {
         status: 201,
         headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
       });
     } catch (err) {
-      console.error("signup error", err);
+      console.error("Signup error:", err.stack || err);
       return new Response(JSON.stringify({ error: "Internal server error (signup)" }), {
         status: 500,
         headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
@@ -109,7 +107,9 @@ export async function onRequestPost(context) {
     }
   }
 
-  // -------- LOGIN --------
+  // =========================================================
+  // LOGIN
+  // =========================================================
   if (action === "login") {
     const email = (body.email || "").trim().toLowerCase();
     const password = body.password || "";
@@ -131,8 +131,6 @@ export async function onRequestPost(context) {
       }
 
       const hashed = await hashPassword(password);
-
-      // Accept either hashed match OR plaintext match (backwards compatibility)
       const stored = user.password || "";
       const isHashedMatch = (hashed === stored);
       const isPlainMatch = (password === stored);
@@ -144,17 +142,14 @@ export async function onRequestPost(context) {
         });
       }
 
-      // If plaintext match, upgrade to hashed password
       if (isPlainMatch && !isHashedMatch) {
         try {
           await DB.prepare("UPDATE users SET password = ? WHERE id = ?").bind(hashed, user.id).run();
         } catch (e) {
-          console.error("password upgrade failed", e);
-          // not fatal — continue
+          console.error("Password upgrade failed:", e);
         }
       }
 
-      // Remove sensitive fields before returning
       const safeUser = {
         id: user.id,
         name: user.name,
@@ -168,7 +163,7 @@ export async function onRequestPost(context) {
         headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
       });
     } catch (err) {
-      console.error("login error", err);
+      console.error("Login error:", err.stack || err);
       return new Response(JSON.stringify({ error: "Internal server error (login)" }), {
         status: 500,
         headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
@@ -176,9 +171,10 @@ export async function onRequestPost(context) {
     }
   }
 
-  // -------- FORGOT / RESET (basic flow) --------
+  // =========================================================
+  // FORGOT PASSWORD / RESET
+  // =========================================================
   if (action === "forgot") {
-    // Expect: { email, recovery_code, new_password } OR { email } to request reset link (here we rely on recovery codes)
     const email = (body.email || "").trim().toLowerCase();
 
     if (!email) {
@@ -191,17 +187,15 @@ export async function onRequestPost(context) {
     try {
       const user = await DB.prepare("SELECT id, recovery_code FROM users WHERE email = ?").bind(email).first();
       if (!user) {
-        // don't reveal whether user exists
         return new Response(JSON.stringify({ message: "If an account exists, instructions were sent." }), {
           status: 200,
           headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
         });
       }
 
-      // If client provided both recovery_code and new_password -> perform reset
       if (body.recovery_code && body.new_password) {
         const provided = String(body.recovery_code);
-        if (!user.recovery_code || provided !== user.recovery_code) {
+        if (provided !== user.recovery_code) {
           return new Response(JSON.stringify({ error: "Invalid recovery code" }), {
             status: 401,
             headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
@@ -209,8 +203,10 @@ export async function onRequestPost(context) {
         }
 
         const newHashed = await hashPassword(String(body.new_password));
-        const newCode = makeRecoveryCode(12); // rotate code
-        await DB.prepare("UPDATE users SET password = ?, recovery_code = ? WHERE id = ?").bind(newHashed, newCode, user.id).run();
+        const newCode = makeRecoveryCode(12);
+        await DB.prepare("UPDATE users SET password = ?, recovery_code = ? WHERE id = ?")
+          .bind(newHashed, newCode, user.id)
+          .run();
 
         return new Response(JSON.stringify({ message: "Password reset successful", recovery_code: newCode }), {
           status: 200,
@@ -218,14 +214,12 @@ export async function onRequestPost(context) {
         });
       }
 
-      // Otherwise: client asked to start reset flow — we'll return success message (no email sent by this function)
-      // (You can implement email sending separately; for now return a generic success response.)
       return new Response(JSON.stringify({ message: "If an account exists, follow the reset instructions you received." }), {
         status: 200,
         headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
       });
     } catch (err) {
-      console.error("forgot error", err);
+      console.error("Forgot error:", err.stack || err);
       return new Response(JSON.stringify({ error: "Internal server error (forgot)" }), {
         status: 500,
         headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
@@ -233,7 +227,9 @@ export async function onRequestPost(context) {
     }
   }
 
-  // Unknown action
+  // =========================================================
+  // UNKNOWN ACTION
+  // =========================================================
   return new Response(JSON.stringify({ error: "Unknown action" }), {
     status: 400,
     headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
