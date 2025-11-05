@@ -21,9 +21,6 @@ body {
   justify-content: center;
   align-items: center;
   min-height: 100vh;
-  background-image: linear-gradient(rgba(0,0,0,0.7), rgba(0,0,0,0.7)),
-    url('https://picsum.photos/1920/1080?blur=3');
-  background-size: cover;
 }
 
 .login_email {
