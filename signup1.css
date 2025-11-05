@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Create Account | NagaDataLink</title>
+  <link rel="stylesheet" href="signup.css" />
+</head>
+<body>
+  <div class="login_email">
+    <div class="email_login">
+      <span class="close__btn" onclick="window.location.href='index.html'">&times;</span>
+      <h1>Create Account</h1>
+      <p>Enter your details to create a new account.</p>
+
+      <form id="signupForm">
+        <input type="text" id="name" placeholder="Full Name" required />
+        <input type="email" id="email" placeholder="Email" required />
+        <input type="tel" id="phone" placeholder="Phone (optional)" />
+
+        <div class="password-container">
+          <input type="password" id="password" placeholder="Password" required />
+          <span class="toggle-password" onclick="togglePassword('password', this)">🔍︎</span>
+        </div>
+
+        <div class="password-container">
+          <input type="password" id="confirmPassword" placeholder="Confirm Password" required />
+          <span class="toggle-password" onclick="togglePassword('confirmPassword', this)">🔍︎</span>
+        </div>
+
+        <button type="submit">Sign Up</button>
+      </form>
+
+      <p>Already have an account? <a href="index.html" style="color:#4af;"><b>Login</b></a></p>
+    </div>
+  </div>
+
+  <script>
+    function togglePassword(id, el) {
+      const field = document.getElementById(id);
+      if (field.type === "password") {
+        field.type = "text";
+        el.textContent = "🙈";
+      } else {
+        field.type = "password";
+        el.textContent = "🔍︎";
+      }
+    }
+
+    document.getElementById("signupForm").addEventListener("submit", async (e) => {
+      e.preventDefault();
+
+      const name = document.getElementById("name").value.trim();
+      const email = document.getElementById("email").value.trim();
+      const password = document.getElementById("password").value.trim();
+      const confirmPassword = document.getElementById("confirmPassword").value.trim();
+      const phone = document.getElementById("phone").value.trim();
+
+      if (password !== confirmPassword) {
+        alert("❌ Passwords do not match!");
+        return;
+      }
+
+      const res = await fetch("/api/auth", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "signup",
+          name,
+          email,
+          password,
+          phone
+        }),
+      });
+
+      const data = await res.json();
+      console.log("Signup response:", data);
+
+      if (res.ok) {
+        const code = data.recovery_code;
+
+        // ✅ Success overlay (same design as forgot-password)
+        const msg = document.createElement("div");
+        msg.innerHTML = `
+          <div style="
+            position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
+            background: rgba(0,0,0,0.6); z-index: 9999;
+          ">
+            <div style="
+              background: #111; color: #fff; padding: 20px; border-radius: 10px;
+              text-align: center; max-width: 320px;
+            ">
+              <h3>✅ Signup Successful!</h3>
+              <p>Your recovery code:</p>
+              <pre style="
+                background:#222; color:#0f0; padding:10px; border-radius:8px;
+                user-select:text; white-space: pre-wrap;
+              ">${code}</pre>
+              <small>Copy and keep this code safe for future resets.</small><br><br>
+              <button id="okBtn" style="
+                background:#0f0; color:#000; border:none; padding:8px 14px;
+                border-radius:6px; cursor:pointer;
+              ">OK</button>
+            </div>
+          </div>
+        `;
+
+        document.body.appendChild(msg);
+
+        document.getElementById("okBtn").addEventListener("click", () => {
+          document.body.removeChild(msg);
+          window.location.href = "profile.html";
+        });
+
+      } else {
+        alert("❌ " + (data.error || "Signup failed"));
+      }
+    });
+  </script>
+</body>
+</html>
